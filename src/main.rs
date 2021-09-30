@@ -5,7 +5,7 @@ use std::{
 
 use plotters::prelude::*;
 
-const ZOOM: f32 = 2.0;
+const ZOOM: f32 = 1.0/2.0;
 const RESOLUTION_X: usize = 4;
 const RESOLUTION_Y: usize = 1000;
 const WIDTH: u32 = 1000;
