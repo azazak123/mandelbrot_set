@@ -5,13 +5,13 @@ use std::{
 
 use plotters::prelude::*;
 
-const ZOOM: f32 = 1.0 / 2.0;
-const RESOLUTION_X: usize = 1000;
+const ZOOM: f32 = 2.0;
+const RESOLUTION_X: usize = 4;
 const RESOLUTION_Y: usize = 1000;
 const WIDTH: u32 = 1000;
 const HEIGHT: u32 = 1000;
-const N: u32 = 5000;
-const THREAD_NUMBER: usize = 1;
+const N: u32 = 3000;
+const THREAD_NUMBER: usize = 250;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = BitMapBackend::new("plotters-doc-data/0.png", (WIDTH, HEIGHT)).into_drawing_area();
@@ -27,13 +27,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         THREAD_NUMBER
     ]));
     for i in 0..THREAD_NUMBER {
-        let d = 4f32 / THREAD_NUMBER as f32;
-        let x_range = (-2f32 + d * (i as f32))..(-2f32 + d * ((i + 1) as f32));
-        let y_range = -2f32..2f32;
-        let set_vec = Arc::clone(&set_vectors);
+        let d = 2.0 * (1f32 / ZOOM) / THREAD_NUMBER as f32;
+        let x_range = ((-1f32 / ZOOM) + d * (i as f32))..((-1f32 / ZOOM) + d * ((i + 1) as f32));
+        let y_range = (-1f32 / ZOOM)..(1f32 / ZOOM);
+        let set_vectors = Arc::clone(&set_vectors);
         let handle = std::thread::spawn(move || {
-            let mut set = set_vec.lock().unwrap();
-            set[i] = mandelbrot_generate(x_range, y_range);
+            let mandelbrot_part = mandelbrot_generate(x_range, y_range);
+            {
+                let mut set_vectors = set_vectors.lock().unwrap();
+                set_vectors[i] = mandelbrot_part;
+            }
         });
         handles.push(handle);
     }
@@ -41,14 +44,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         handle.join().unwrap();
     }
     let mut set = Vec::with_capacity(THREAD_NUMBER * RESOLUTION_X * RESOLUTION_Y);
-    // println!("{:?}", set_vectors[0].lock().unwrap().len());
     for i in &mut *set_vectors.lock().unwrap() {
         set.append(i);
     }
     let coords = set.into_iter();
 
     chart.draw_series(coords.map(|coord| Pixel::new(coord, &BLACK)))?;
-
     Ok(())
 }
 
