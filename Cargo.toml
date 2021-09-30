@@ -7,3 +7,5 @@ edition = "2018"
 
 [dependencies]
 plotters = "0.3.1"
+piston_window = "0.120.0"
+plotters-piston = {git = "https://github.com/plotters-rs/plotters-piston"}
