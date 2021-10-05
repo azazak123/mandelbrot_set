@@ -1,78 +1,87 @@
+use minifb::*;
+use plotters::prelude::*;
+use std::fs::File;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
 };
 
-use piston_window::*;
-use plotters::prelude::*;
-use plotters_piston::{draw_piston_window, PistonBackend};
-
+// const ZOOM: f32 = 1.0 / 2.0;
 const RESOLUTION_Y: usize = 1000;
 const RESOLUTION_X: usize = RESOLUTION_Y / THREAD_NUMBER;
 const WIDTH: u32 = 1000;
 const HEIGHT: u32 = 1000;
-const N: u32 = 3000;
+const N: u32 = 1000;
 const THREAD_NUMBER: usize = 250;
-const FPS: u64 = 10;
 
 fn main() {
-    let mut window: PistonWindow =
-        WindowSettings::new("Real Time CPU Usage", [WIDTH - 200, HEIGHT - 200])
-            .exit_on_esc(true)
-            .resizable(false)
-            .build()
-            .unwrap();
-    window.set_max_fps(FPS);
+    let mut window = Window::new(
+        "Test - Press ESC to exit",
+        WIDTH as usize,
+        HEIGHT as usize,
+        WindowOptions::default(),
+    )
+    .expect("Unable to open Window");
 
-    let mut ZOOM: f32 = 1.0;
-    let mut events = Events::new(EventSettings::new().lazy(true));
     let mut generate = true;
-    loop {
-        if let Some(e) = events.next(&mut window) {
-            if let Some(Button::Keyboard(key)) = e.press_args() {
-                match key {
-                    Key::C => {
-                        generate = true;
-                    }
-                    Key::A => {
-                        return;
-                    }
-                    Key::Space => {
-                        println!("click");
-                    }
-                    Key::Plus => {
-                        ZOOM += 1.0 / 10.0;
-                        generate = true;
-                    }
-                    Key::Minus => {
-                        ZOOM -= 1.0 / 10.0;
-                        if ZOOM == 0.0 {
-                            ZOOM = 1.0 / 10.0
-                        }
-                        generate = true;
-                    }
-                    _ => {}
-                }
+    let mut u32_buffer = vec![0; (WIDTH * HEIGHT) as usize];
+    let mut ZOOM = 1.0;
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        if window.is_key_down(Key::Space) {
+            println!("click");
+        }
+        if window.is_key_down(Key::Z) {
+            ZOOM += 1.0 / 10.0;
+            generate = true;
+        }
+        if window.is_key_down(Key::X) {
+            ZOOM -= 1.0 / 10.0;
+            if ZOOM == 0.0 {
+                ZOOM = 1.0 / 10.0
             }
+            generate = true;
         }
-        if !generate {
-            continue;
+
+        if generate {
+            draw(ZOOM).expect("Unable to draw");
+            let decoder = png::Decoder::new(File::open("plotters-doc-data/0.png").unwrap());
+            let mut reader = decoder.read_info().unwrap();
+            let mut buf = vec![0; reader.info().raw_bytes()];
+            reader.next_frame(&mut buf).expect("Unable to read picture");
+            u32_buffer = buf
+                .chunks(3)
+                .filter(|v| v.len() == 3)
+                .map(|v| {
+                    //println!("{:?}", v);
+                    ((v[0] as u32) << 16) | ((v[1] as u32) << 8) | v[2] as u32
+                })
+                .collect::<Vec<u32>>();
+            window
+                .update_with_buffer(&u32_buffer, WIDTH as usize, HEIGHT as usize)
+                .expect("Unable to update Window");
+            generate = !generate;
+        } else {
+            window
+                .update_with_buffer(&u32_buffer, WIDTH as usize, HEIGHT as usize)
+                .expect("Unable to update Window");
         }
-        if let Some(_) = draw_piston_window(&mut window, |b| {
-            println!("generate");
-            let root = b.into_drawing_area();
-            root.fill(&WHITE)?;
-            let mut chart = ChartBuilder::on(&root)
-                .build_cartesian_2d((-1f32 / ZOOM)..(1f32 / ZOOM), (-1f32 / ZOOM)..(1f32 / ZOOM))?;
-
-            let set = mandelbrot_generate_threading(ZOOM);
-            let coords = set.into_iter();
-
-            chart.draw_series(coords.map(|coord| Pixel::new(coord, &BLACK)))?;
-            generate = false;
-            Ok(())
-        }) {}
     }
+}
+
+fn draw(ZOOM: f32) -> Result<()> {
+    let root = BitMapBackend::new("plotters-doc-data/0.png", (WIDTH, HEIGHT)).into_drawing_area();
+    root.fill(&WHITE).unwrap();
+    let mut chart = ChartBuilder::on(&root)
+        .build_cartesian_2d((-1f32 / ZOOM)..(1f32 / ZOOM), (-1f32 / ZOOM)..(1f32 / ZOOM))
+        .unwrap();
+
+    let set = mandelbrot_generate_threading(ZOOM);
+    let coords = set.into_iter();
+
+    chart
+        .draw_series(coords.map(|coord| Pixel::new(coord, &BLACK)))
+        .unwrap();
+    Ok(())
 }
 
 fn mandelbrot_generate_threading(ZOOM: f32) -> Vec<(f32, f32)> {
