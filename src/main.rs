@@ -164,6 +164,5 @@ fn mandelbrot_generate(x_range: Range<f64>, y_range: Range<f64>, n_var: u32) -> 
         }
         y += dy / RESOLUTION_Y as f64;
     }
-    println!("{:?} {:?}", x_range, y_range);
     result
 }
