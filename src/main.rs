@@ -6,13 +6,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-// const ZOOM: f32 = 1.0 / 2.0;
-const RESOLUTION_Y: usize = 1000;
+// const ZOOM: f64 = 1.0 / 2.0;
+const RESOLUTION_Y: usize = 500;
 const RESOLUTION_X: usize = RESOLUTION_Y / THREAD_NUMBER;
-const WIDTH: u32 = 1000;
-const HEIGHT: u32 = 1000;
+const WIDTH: u32 = 500;
+const HEIGHT: u32 = 500;
 const N: u32 = 1000;
-const THREAD_NUMBER: usize = 250;
+const THREAD_NUMBER: usize = 50;
 
 fn main() {
     let mut window = Window::new(
@@ -25,25 +25,41 @@ fn main() {
 
     let mut generate = true;
     let mut u32_buffer = vec![0; (WIDTH * HEIGHT) as usize];
-    let mut ZOOM = 1.0;
+    let mut zoom = 1.1;
+    let mut x0 = 0.0;
+    let mut y0 = 0.0;
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        if window.is_key_down(Key::Space) {
-            println!("click");
-        }
+        if window.is_key_down(Key::Space) {}
         if window.is_key_down(Key::Z) {
-            ZOOM += 1.0 / 10.0;
+            zoom += zoom / 10.0;
             generate = true;
         }
         if window.is_key_down(Key::X) {
-            ZOOM -= 1.0 / 10.0;
-            if ZOOM == 0.0 {
-                ZOOM = 1.0 / 10.0
+            zoom -= zoom / 10.0;
+            if zoom < 0.0 {
+                zoom = 0.0;
             }
+            generate = true;
+        }
+        if window.is_key_down(Key::Right) {
+            x0 += 0.5 / zoom;
+            generate = true;
+        }
+        if window.is_key_down(Key::Left) {
+            x0 -= 0.5 / zoom;
+            generate = true;
+        }
+        if window.is_key_down(Key::Up) {
+            y0 += 0.5 / zoom;
+            generate = true;
+        }
+        if window.is_key_down(Key::Down) {
+            y0 -= 0.5 / zoom;
             generate = true;
         }
 
         if generate {
-            draw(ZOOM).expect("Unable to draw");
+            draw(zoom, x0, y0).expect("Unable to draw");
             let decoder = png::Decoder::new(File::open("plotters-doc-data/0.png").unwrap());
             let mut reader = decoder.read_info().unwrap();
             let mut buf = vec![0; reader.info().raw_bytes()];
@@ -68,14 +84,17 @@ fn main() {
     }
 }
 
-fn draw(ZOOM: f32) -> Result<()> {
+fn draw(zoom: f64, x0: f64, y0: f64) -> Result<()> {
     let root = BitMapBackend::new("plotters-doc-data/0.png", (WIDTH, HEIGHT)).into_drawing_area();
     root.fill(&WHITE).unwrap();
     let mut chart = ChartBuilder::on(&root)
-        .build_cartesian_2d((-1f32 / ZOOM)..(1f32 / ZOOM), (-1f32 / ZOOM)..(1f32 / ZOOM))
+        .build_cartesian_2d(
+            (x0 - 1f64 / zoom)..(x0 + 1f64 / zoom),
+            (y0 - 1f64 / zoom)..(y0 + 1f64 / zoom),
+        )
         .unwrap();
 
-    let set = mandelbrot_generate_threading(ZOOM);
+    let set = mandelbrot_generate_threading(zoom, x0, y0);
     let coords = set.into_iter();
 
     chart
@@ -84,21 +103,23 @@ fn draw(ZOOM: f32) -> Result<()> {
     Ok(())
 }
 
-fn mandelbrot_generate_threading(ZOOM: f32) -> Vec<(f32, f32)> {
+fn mandelbrot_generate_threading(zoom: f64, x0: f64, y0: f64) -> Vec<(f64, f64)> {
     let mut handles = Vec::with_capacity(THREAD_NUMBER);
     let set_vectors = Arc::new(Mutex::new(vec![
-        Vec::<(f32, f32)>::with_capacity(
+        Vec::<(f64, f64)>::with_capacity(
             RESOLUTION_X * RESOLUTION_Y
         );
         THREAD_NUMBER
     ]));
     for i in 0..THREAD_NUMBER {
-        let d = 2.0 * (1f32 / ZOOM) / THREAD_NUMBER as f32;
-        let x_range = ((-1f32 / ZOOM) + d * (i as f32))..((-1f32 / ZOOM) + d * ((i + 1) as f32));
-        let y_range = (-1f32 / ZOOM)..(1f32 / ZOOM);
+        let d = 2.0 * (1f64 / zoom) / THREAD_NUMBER as f64;
+        let x_range =
+            (x0 + (-1f64 / zoom) + d * (i as f64))..(x0 + (-1f64 / zoom) + d * ((i + 1) as f64));
+        let y_range = (y0 - 1f64 / zoom)..(y0 + 1f64 / zoom);
         let set_vectors = Arc::clone(&set_vectors);
         let handle = std::thread::spawn(move || {
-            let mandelbrot_part = mandelbrot_generate(x_range, y_range);
+            let mandelbrot_part =
+                mandelbrot_generate(x_range, y_range, N + zoom.sqrt().ln() as u32);
             {
                 let mut set_vectors = set_vectors.lock().unwrap();
                 set_vectors[i] = mandelbrot_part;
@@ -116,32 +137,33 @@ fn mandelbrot_generate_threading(ZOOM: f32) -> Vec<(f32, f32)> {
     set
 }
 
-fn mandelbrot_generate(x_range: Range<f32>, y_range: Range<f32>) -> Vec<(f32, f32)> {
+fn mandelbrot_generate(x_range: Range<f64>, y_range: Range<f64>, n_var: u32) -> Vec<(f64, f64)> {
     let dx = x_range.end - x_range.start;
     let dy = y_range.end - y_range.start;
-    let mut result: Vec<(f32, f32)> = Vec::with_capacity(RESOLUTION_X * RESOLUTION_Y);
+    let mut result: Vec<(f64, f64)> = Vec::with_capacity(RESOLUTION_X * RESOLUTION_Y);
     let mut y = y_range.start;
-    for i in 0..RESOLUTION_Y {
+    for _i in 0..RESOLUTION_Y {
         let mut x = x_range.start;
-        for j in 0..RESOLUTION_X {
-            let mut x_current = 0f32;
-            let mut y_current = 0f32;
+        for _j in 0..RESOLUTION_X {
+            let mut x_current = 0f64;
+            let mut y_current = 0f64;
             let p = x;
             let q = y;
             let mut n = 0;
-            while n < N && (x_current * x_current - y_current * y_current) < 2.0 {
+            while n < n_var && (x_current * x_current - y_current * y_current) < 2.0 {
                 let x_prev = x_current;
                 let y_prev = y_current;
                 x_current = x_prev * x_prev - y_prev * y_prev + p;
                 y_current = 2.0 * x_prev * y_prev + q;
                 n += 1;
             }
-            if n == N {
+            if n == n_var {
                 result.push((p, q));
             }
-            x += dx / RESOLUTION_X as f32;
+            x += dx / RESOLUTION_X as f64;
         }
-        y += dy / RESOLUTION_Y as f32;
+        y += dy / RESOLUTION_Y as f64;
     }
+    println!("{:?} {:?}", x_range, y_range);
     result
 }
