@@ -44,20 +44,30 @@ impl Application for Viewer {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Zoom(_) => {}
+            Message::Zoom(Change::Increase) => {
+                self.zoom_level = self.zoom_level.saturating_add(1);
+                self.range_x = (self.range_x.0 / 2.0, self.range_x.1 / 2.0);
+                self.range_y = (self.range_y.0 / 2.0, self.range_y.1 / 2.0);
+            }
+            Message::Zoom(Change::Decrease) if self.zoom_level != 1 => {
+                self.zoom_level -= 1;
+                self.range_x = (self.range_x.0 * 2.0, self.range_x.1 * 2.0);
+                self.range_y = (self.range_y.0 * 2.0, self.range_y.1 * 2.0);
+            }
             Message::Move(_) => {}
+            _ => {}
         }
 
         let points = mandelbrot_generate_threading(
-            1.0 / (1 << self.zoom_level) as f64,
+            1.0 / 2.0 * (1 << (self.zoom_level - 1)) as f64,
             (self.range_x.1 + self.range_x.0) as f64 / 2.0,
             (self.range_y.1 + self.range_y.0) as f64 / 2.0,
         )
         .iter()
         .map(|(x, y)| {
             (
-                (*x as f32 - self.range_x.0) * 100.0,
-                (*y as f32 - self.range_y.0) * 100.0,
+                (*x as f32 - self.range_x.0) * 100.0 * (1 << (self.zoom_level - 1)) as f32,
+                (*y as f32 - self.range_y.0) * 100.0 * (1 << (self.zoom_level - 1)) as f32,
             )
         })
         .collect();
