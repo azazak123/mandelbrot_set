@@ -105,7 +105,7 @@ fn draw(zoom: f64, x0: f64, y0: f64) -> Result<()> {
     let coords = set.into_iter();
 
     chart
-        .draw_series(coords.map(|coord| Pixel::new(coord, &BLACK)))
+        .draw_series(coords.map(|coord| Pixel::new(coord, BLACK)))
         .unwrap();
     Ok(())
 }
