@@ -1,6 +1,6 @@
 use minifb::*;
 use plotters::prelude::*;
-use std::fs::File;
+use std::fs;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
@@ -12,6 +12,8 @@ const WIDTH: u32 = 500;
 const HEIGHT: u32 = 500;
 const N: u32 = 1000;
 const THREAD_NUMBER: usize = 50;
+const PLOT_PATH: &str = "./tmp/plot.png";
+const TMP_PATH: &str = "./tmp";
 
 fn main() {
     let mut window = Window::new(
@@ -21,6 +23,8 @@ fn main() {
         WindowOptions::default(),
     )
     .expect("Unable to open Window");
+
+    fs::create_dir_all(TMP_PATH).expect("Unable to create tmp folder");
 
     let mut generate = true;
     let mut u32_buffer = vec![0; (WIDTH * HEIGHT) as usize];
@@ -61,7 +65,7 @@ fn main() {
         if generate {
             draw(zoom, x0, y0).expect("Unable to draw");
 
-            let decoder = png::Decoder::new(File::open("plotters-doc-data/0.png").unwrap());
+            let decoder = png::Decoder::new(fs::File::open(PLOT_PATH).unwrap());
             let mut reader = decoder.read_info().unwrap();
             let mut buf = vec![0; reader.info().raw_bytes()];
 
@@ -87,7 +91,7 @@ fn main() {
 }
 
 fn draw(zoom: f64, x0: f64, y0: f64) -> Result<()> {
-    let root = BitMapBackend::new("plotters-doc-data/0.png", (WIDTH, HEIGHT)).into_drawing_area();
+    let root = BitMapBackend::new(PLOT_PATH, (WIDTH, HEIGHT)).into_drawing_area();
     root.fill(&WHITE).unwrap();
 
     let mut chart = ChartBuilder::on(&root)
